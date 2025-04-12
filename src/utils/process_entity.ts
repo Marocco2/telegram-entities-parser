@@ -30,35 +30,38 @@ export function processEntity(
     text: entityText,
   });
 
-  // Check if the next entity starts at the same position as the current one (nested entity).
-  if (entity.offset === nextEntity?.offset) {
-    // Recursively process the next entity.
-    const { text: htmlText, index: lastIndex, endOfEntity } = processEntity({
+  // Process nested or overlapping entities
+  let nestedText = "";
+  let currentIndex = index + 1;
+
+  while (
+    currentIndex < entities.length &&
+    entities[currentIndex].offset < entity.offset + entity.length
+  ) {
+    const nestedEntityResult = processEntity({
       ...options,
-      index: index + 1,
+      index: currentIndex,
     });
 
-    const remainingText = text.slice(
-      endOfEntity,
-      entity.offset + entity.length,
-    );
-
-    const escapedText = textSanitizer({ text: remainingText });
-
-    return {
-      index: lastIndex,
-      text: `${prefix}${htmlText}${escapedText}${suffix}`,
-      endOfEntity: entity.offset + entity.length,
-    };
-  } else {
-    const escapedText = textSanitizer({ text: entityText });
-
-    return {
-      index,
-      text: `${prefix}${escapedText}${suffix}`,
-      endOfEntity: entity.offset + entity.length,
-    };
+    nestedText += nestedEntityResult.text;
+    currentIndex = nestedEntityResult.index + 1;
   }
+
+  // Compute the remaining text after nested entities
+  const remainingText = text.slice(
+    nestedText
+      ? Math.max(...entities.map((e) => e.offset + e.length))
+      : entity.offset + entity.length,
+    entity.offset + entity.length,
+  );
+
+  const escapedText = textSanitizer({ text: remainingText });
+
+  return {
+    index: currentIndex - 1,
+    text: `${prefix}${nestedText || escapedText}${suffix}`,
+    endOfEntity: entity.offset + entity.length,
+  };
 }
 
 interface ProcessEntityOption {
